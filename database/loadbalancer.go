@@ -69,7 +69,7 @@ func deleteFromVip(table, id string, db *sql.DB) {
 
 func findDepsByLoadbalancerId(id, dep string, db *sql.DB) []string {
 	deps := []string{}
-	res, _ := db.Query(fmt.Sprintf("SELECT id FROM listener WHERE load_balancer_id=?",dep))
+	res, _ := db.Query(fmt.Sprintf("SELECT id FROM %s WHERE load_balancer_id=?",dep))
 	for res.Next() {
 		var lb LoadbalancerTable
 		err := res.Scan(
@@ -95,7 +95,7 @@ func deleteLoadbalancer(load_balancer_id string, db *sql.DB) {
 		deleteListener(listener, load_balancer_id, db)
 	}
 	// delete balancer
-	deleteFromVip(vip,load_balancer_id,db)
-	deleteItem(loadBalancer,load_balancer_id,db)
+	deleteFromVip(vip, load_balancer_id, db)
+	deleteItem(loadBalancer, load_balancer_id, db)
 }
 
