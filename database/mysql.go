@@ -8,6 +8,19 @@ import (
 	"fmt"
 )
 
+const (
+	pendingCreate = "PENDING_CREATE"
+	pendingUpdate = "PENDING_UPDATE"
+	pendingDelete = "PENDING_DELETE"
+	deleted = "DELETED"
+	active = "ACTIVE"
+	loadBalancer = "load_balancer"
+	listener = "listener"
+	pool = "pool"
+	member = "member"
+	vip = "vip"
+)
+
 type LoadbalancerTable struct {
 	ProjectId			string
 	Id					string
@@ -104,6 +117,115 @@ func Connect(url string) (error, *sql.DB) {
 	return nil, db
 }
 
+func updateProvisioningStatus(table, old_status, status, id string, db *sql.DB) {
+	update, err := db.Prepare(fmt.Sprintf("UPDATE %s SET provisioning_status=? WHERE id=? and provisioning_status=?",table))
+	if err != nil {
+		logger.Debug(err)
+	}
+	_, err = update.Exec(status,id,old_status)
+	if err != nil {
+		logger.Debug(err)
+	} else {
+		logger.Debug(fmt.Errorf("%s:%s provisioning_status: %s -> %s",table,id,old_status,status))
+	}
+}
+
+func updateOperatingStatus(table, status, id string, db *sql.DB) {
+	update, err := db.Prepare(fmt.Sprintf("UPDATE %s SET operating_status=? WHERE id=?",table))
+	if err != nil {
+		logger.Debug(err)
+	}
+	_, err = update.Exec(status,id)
+	if err != nil {
+		logger.Debug(err)
+	} else {
+		logger.Debug(fmt.Errorf("%s:%s operating_status: -> %s",table,id,status))
+	}
+}
+
+func deleteItem(table, id string, db *sql.DB) {
+	del, err := db.Prepare(fmt.Sprintf("DELETE from %s WHERE id=?",table))
+	if err != nil {
+		logger.Debug(err)
+	}
+	_, err = del.Exec(id)
+	if err != nil {
+		logger.Debug(err)
+	} else {
+		logger.Debug(fmt.Errorf("%s %s: DELETED",table, id))
+	}
+}
+
+func deleteFromVip(table, id string, db *sql.DB) {
+	del, err := db.Prepare(fmt.Sprintf("DELETE from %s WHERE load_balancer_id=?",table))
+	if err != nil {
+		logger.Debug(err)
+	}
+	_, err = del.Exec(id)
+	if err != nil {
+		logger.Debug(err)
+	} else {
+		logger.Debug(fmt.Errorf("%s %s: DELETED",table, id))
+	}
+}
+
+func removeDefaultPoolFromListener(table, pool_id, load_balancer_id string, db *sql.DB) {
+	update, err := db.Prepare(fmt.Sprintf("UPDATE %s SET default_pool_id=NULL WHERE load_balancer_id=? AND default_pool_id=?",table))
+	if err != nil {
+		logger.Debug(err)
+	}
+	_, err = update.Exec(load_balancer_id, pool_id)
+	if err != nil {
+		logger.Debug(err)
+	} else {
+		logger.Debug(fmt.Errorf("%s %s default_pool_id deleted",table,pool_id))
+	}
+}
+
+func findDepsByLoadbalancerId(id, dep string, db *sql.DB) []string {
+	deps := []string{}
+	res, _ := db.Query(fmt.Sprintf("SELECT id FROM listener WHERE load_balancer_id=?",dep))
+	for res.Next() {
+		var lb LoadbalancerTable
+		err := res.Scan(
+			&lb.Id,
+		)
+		if err != nil {
+			logger.Debug(err)
+		}
+		deps = append(deps, lb.Id)
+	}
+	return deps
+}
+
+func deleteLoadbalancer(load_balancer_id string, db *sql.DB) {
+	listeners := findDepsByLoadbalancerId(load_balancer_id, listener, db)
+	pools := findDepsByLoadbalancerId(load_balancer_id, pool, db)
+	// delete pools first
+	for _, pool := range pools {
+		deletePool(pool, load_balancer_id, db)
+	}
+	// delete listeners
+	for _, listener := range listeners {
+		deleteListener(listener, load_balancer_id, db)
+	}
+	// delete balancer
+	deleteFromVip(vip,load_balancer_id,db)
+	deleteItem(loadBalancer,load_balancer_id,db)
+}
+
+func deleteListener(listener_id, load_balancer_id string, db *sql.DB) {
+	deleteItem(listener,listener_id,db)
+	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
+}
+
+func deletePool(pool_id, load_balancer_id string, db *sql.DB) {
+	removeDefaultPoolFromListener(listener,pool_id,load_balancer_id,db)
+	deleteItem(pool,pool_id,db)
+	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
+}
+
+// load_balancer table from octavia database
 func UpdateTableLoadbalancer(db *sql.DB, obj rabbit.ObjEntity) {
 	res, _ := db.Query("SELECT  project_id, id, operating_status, provisioning_status FROM load_balancer;")
 	for res.Next() {
@@ -118,27 +240,15 @@ func UpdateTableLoadbalancer(db *sql.DB, obj rabbit.ObjEntity) {
 			logger.Debug(err)
 		}
 
-		if obj.OperatingStatus == "ONLINE" && ( lb.ProvisioningStatus == "PENDING_CREATE" || lb.ProvisioningStatus == "PENDING_UPDATE" ) {
-			update, err := db.Prepare("UPDATE load_balancer SET operating_status=?, provisioning_status=? WHERE id=?")
-			if err != nil {
-				logger.Debug(err)
-			}
-			_, err = update.Exec(obj.OperatingStatus,"ACTIVE",lb.Id)
-			if err != nil {
-				logger.Debug(err)
-			} else {
-				logger.Debug(fmt.Errorf("load_balancer:%s updated from provisioing_status:%s -> ACTIVE,operating_status:%s -> %s",
-					lb.Id,lb.ProvisioningStatus,lb.OperatingStatus,obj.OperatingStatus))
-			}
-		} else if lb.ProvisioningStatus == "PENDING_DELETE" {
-			del, err := db.Prepare("UPDATE load_balancer SET operating_status=?, provisioning_status=? WHERE id=?")
-			if err != nil {
-				logger.Debug(err)
-			}
-			_, err = del.Exec("OFFLINE","DELETED",lb.Id)
-			if err != nil {
-				logger.Debug(err)
-			}
+		// check for operating_status first
+		if lb.OperatingStatus != obj.OperatingStatus {
+			updateOperatingStatus(loadBalancer,obj.OperatingStatus,lb.Id,db)
+		}
+		// if this a new balancer (PENDING_CREATE), update it status to ACTIVE
+		if lb.ProvisioningStatus == pendingCreate {
+			updateProvisioningStatus(loadBalancer,pendingCreate,active,lb.Id,db)
+		} else if lb.ProvisioningStatus == pendingDelete {
+			deleteLoadbalancer(lb.Id, db)
 		}
 	}
 }
@@ -158,21 +268,18 @@ func UpdateTableListener(db *sql.DB, obj rabbit.ObjEntity) {
 			logger.Debug(err)
 		}
 
-		if ( obj.OperatingStatus == "ONLINE" || obj.OperatingStatus == "OFFLINE" ) && ( ls.ProvisioningStatus == "PENDING_CREATE" || ls.ProvisioningStatus == "PENDING_UPDATE" ) {
-			update, err := db.Prepare("UPDATE listener SET operating_status=?, provisioning_status=? WHERE id=? and load_balancer_id=?")
-			if err != nil {
-				logger.Debug(err)
-			}
-			_, err = update.Exec(obj.OperatingStatus,"ACTIVE",ls.Id,ls.LoadbalancerId)
-			if err != nil {
-				logger.Debug(err)
-			}
-		} else if ls.ProvisioningStatus == "PENDING_DELETE" {
-			del, err := db.Prepare("UPDATE listener SET operating_status=?, provisioning_status=? WHERE id=? and load_balancer_id=?")
-			if err != nil {
-				logger.Debug(err)
-			}
-			del.Exec("OFFLINE","DELETED",ls.Id,ls.LoadbalancerId)
+		// check for operating_status first
+		if ls.OperatingStatus != obj.OperatingStatus {
+			updateOperatingStatus(listener,obj.OperatingStatus,ls.Id,db)
+		}
+		// update provisioing_status for listener and corresponding load_balancer
+		if ls.ProvisioningStatus == pendingCreate {
+			updateProvisioningStatus(listener,pendingCreate,active,ls.Id,db)
+			updateProvisioningStatus(loadBalancer,pendingUpdate,active,ls.LoadbalancerId,db)
+		} else if ls.ProvisioningStatus == pendingDelete {
+			deleteListener(ls.Id,ls.LoadbalancerId,db)
+			//deleteItem(listener,ls.Id,db)
+			//updateProvisioningStatus(loadBalancer,pendingUpdate,active,ls.LoadbalancerId,db)
 		}
 	}
 }
@@ -192,24 +299,20 @@ func UpdateTablePool(db *sql.DB, obj rabbit.ObjEntity) {
 			logger.Debug(err)
 		}
 
-		if ( obj.OperatingStatus == "ONLINE" || obj.OperatingStatus == "OFFLINE" ) && ( pl.ProvisioningStatus == "PENDING_CREATE" || pl.ProvisioningStatus == "PENDING_UPDATE" ) {
-			update, err := db.Prepare("UPDATE pool SET operating_status=?, provisioning_status=? WHERE id=? and load_balancer_id=?")
-			if err != nil {
-				logger.Debug(err)
-			}
-			_, err = update.Exec(obj.OperatingStatus,"ACTIVE",pl.Id,pl.LoadbalancerId)
-			if err != nil {
-				logger.Debug(err)
-			}
-		} else if pl.ProvisioningStatus == "PENDING_DELETE" {
-			del, err := db.Prepare("UPDATE pool SET operating_status=?, provisioning_status=? WHERE id=? and load_balancer_id=?")
-			if err != nil {
-				logger.Debug(err)
-			}
-			_, err = del.Exec("OFFLINE","DELETED",pl.Id,pl.LoadbalancerId)
-			if err != nil {
-				logger.Debug(err)
-			}
+		// check for operating_status first
+		if pl.OperatingStatus != obj.OperatingStatus {
+			updateOperatingStatus(pool,obj.OperatingStatus,pl.Id,db)
+		}
+		// update provisioing_status for pool and and corresponding listener,load_balancer
+		if pl.ProvisioningStatus == pendingCreate {
+			updateProvisioningStatus(pool,pendingCreate,active,pl.Id,db)
+			updateProvisioningStatus(listener,pendingUpdate,active,pl.LoadbalancerId,db)
+			updateProvisioningStatus(loadBalancer,pendingUpdate,active,pl.LoadbalancerId,db)
+		} else if pl.ProvisioningStatus == pendingDelete {
+			deletePool(pl.Id, pl.LoadbalancerId, db)
+			//removeDefaultPoolFromListener(listener,pl.Id,pl.LoadbalancerId,db)
+			//deleteItem(pool,pl.Id,db)
+			//updateProvisioningStatus(loadBalancer,pendingUpdate,active,pl.LoadbalancerId,db)
 		}
 	}
 }
@@ -218,31 +321,25 @@ func UpdateTableMember(db *sql.DB, obj rabbit.ObjEntity) {
 	res, _ := db.Query("SELECT  project_id, id, operating_status, provisioning_status, pool_id  FROM member;")
 	for res.Next() {
 		var mb MemberTable
-		res.Scan(
+		err := res.Scan(
 			&mb.ProjectId,
 			&mb.Id,
 			&mb.OperatingStatus,
 			&mb.ProvisioningStatus,
 			&mb.PoolId,
 		)
-		if ( obj.OperatingStatus == "ONLINE" || obj.OperatingStatus == "OFFLINE" ) && ( mb.ProvisioningStatus == "PENDING_CREATE" || mb.ProvisioningStatus == "PENDING_UPDATE" ) {
-			update, err := db.Prepare("UPDATE member SET operating_status=?, provisioning_status=? WHERE id=? and pool_id=?")
-			if err != nil {
-				logger.Debug(err)
-			}
-			_, err = update.Exec(obj.OperatingStatus,"ACTIVE",mb.Id,mb.PoolId)
-			if err != nil {
-				logger.Debug(err)
-			}
-		} else if mb.ProvisioningStatus == "PENDING_DELETE" {
-			del, err := db.Prepare("UPDATE member SET operating_status=?, provisioning_status=? WHERE id=? and pool_id=?")
-			if err != nil {
-				logger.Debug(err)
-			}
-			_, err = del.Exec("OFFLINE","DELETED",mb.Id,mb.PoolId)
-			if err != nil {
-				logger.Debug(err)
-			}
+
+		if err != nil {
+			logger.Debug(err)
+		}
+
+		// check for operating_status first
+		if mb.OperatingStatus != obj.OperatingStatus {
+			updateOperatingStatus(member,obj.OperatingStatus,mb.Id,db)
+		}
+		if mb.ProvisioningStatus == pendingCreate {
+			updateProvisioningStatus(member,pendingCreate,active,mb.Id,db)
+			updateProvisioningStatus(pool,pendingUpdate,active,mb.PoolId,db)
 		}
 	}
 }
