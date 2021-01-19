@@ -19,6 +19,7 @@ const (
 	member = "member"
 	healthMonitor = "health_monitor"
 	vip = "vip"
+	sessionPersistence = "session_persistence"
 )
 
 func Connect(url string) (error, *sql.DB) {

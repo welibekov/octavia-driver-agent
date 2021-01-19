@@ -5,6 +5,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"octavia-driver-agent/rabbit"
 	"octavia-driver-agent/logger"
+	"fmt"
 )
 
 type PoolTable struct {
@@ -26,14 +27,31 @@ type PoolTable struct {
 	TlsEnabled				int
 }
 
+func removeDefaultPoolFromSessionPersistence(table, pool_id string, db *sql.DB) {
+	del, err := db.Prepare(fmt.Sprintf("DELETE from %s WHERE pool_id=?",table))
+	if err != nil {
+		logger.Debug(err)
+	}
+	_, err = del.Exec(pool_id)
+	if err != nil {
+		logger.Debug(err)
+	} else {
+		logger.Debug(fmt.Errorf("%s %s: DELETED",table, pool_id))
+	}
+}
+
 func deletePool(pool_id, load_balancer_id string, db *sql.DB) {
+	removeDefaultPoolFromSessionPersistence(sessionPersistence,pool_id,db)
 	removeDefaultPoolFromListener(listener,pool_id,load_balancer_id,db)
 	deleteItem(pool,pool_id,db)
 	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
 }
 
 func UpdateTablePool(db *sql.DB, obj rabbit.ObjEntity) {
-	res, _ := db.Query("SELECT  project_id, id, operating_status, provisioning_status, load_balancer_id FROM pool;")
+	res, err := db.Query("SELECT  project_id, id, operating_status, provisioning_status, load_balancer_id FROM pool;")
+	if err != nil {
+		logger.Debug(err)
+	}
 	var pl PoolTable
 	for res.Next() {
 		err := res.Scan(
@@ -58,9 +76,6 @@ func UpdateTablePool(db *sql.DB, obj rabbit.ObjEntity) {
 			updateProvisioningStatus(loadBalancer,pendingUpdate,active,pl.LoadbalancerId,db)
 		} else if pl.ProvisioningStatus == pendingDelete {
 			deletePool(pl.Id, pl.LoadbalancerId, db)
-			//removeDefaultPoolFromListener(listener,pl.Id,pl.LoadbalancerId,db)
-			//deleteItem(pool,pl.Id,db)
-			//updateProvisioningStatus(loadBalancer,pendingUpdate,active,pl.LoadbalancerId,db)
 		}
 	}
 }
