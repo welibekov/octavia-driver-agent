@@ -15,9 +15,30 @@ type HealthMonitorTable struct {
 	ProjectId string
 }
 
+func createHealthMonitor(health_monitor_id, pool_id string, db *sql.DB) {
+	load_balancer_id := getLoadbalanceIdFromPoolId(pool_id, db)
+	listener_id := getListenerIdFromLoadbalancerId(load_balancer_id, db)
+
+	updateProvisioningStatus(healthMonitor, pendingCreate, active, health_monitor_id, db)
+	updateProvisioningStatus(pool, pendingUpdate, active, pool_id, db)
+	updateProvisioningStatus(listener, pendingUpdate, active, listener_id, db)
+	updateProvisioningStatus(loadBalancer, pendingUpdate, active, load_balancer_id, db)
+}
+
+func deleteHealthMonitor(health_monitor_id, pool_id string, db *sql.DB) {
+	load_balancer_id := getLoadbalanceIdFromPoolId(pool_id, db)
+	listener_id := getListenerIdFromLoadbalancerId(load_balancer_id, db)
+
+	deleteItem(healthMonitor, health_monitor_id, db)
+	updateProvisioningStatus(pool, pendingUpdate, active, pool_id, db)
+	updateProvisioningStatus(listener, pendingUpdate, active, listener_id, db)
+	updateProvisioningStatus(loadBalancer, pendingUpdate, active, load_balancer_id, db)
+}
+
 func UpdateTableHealthMonitor(db *sql.DB) {
 	res, _ := db.Query("SELECT  project_id, id, operating_status, provisioning_status, pool_id  FROM health_monitor;")
 	var hm HealthMonitorTable
+
 	for res.Next() {
 		err := res.Scan(
 			&hm.ProjectId,
@@ -36,14 +57,11 @@ func UpdateTableHealthMonitor(db *sql.DB) {
 		//}
 
 		// update provisioing_status for pool and and corresponding listener,load_balancer
-		if hm.ProvisioningStatus == pendingCreate {
-			load_balancer_id := getLoadbalanceIdFromPoolId(hm.PoolId, db)
-			listener_id := getListenerIdFromLoadbalancerId(load_balancer_id, db)
 
-			updateProvisioningStatus(healthMonitor,pendingCreate,active,hm.Id,db)
-			updateProvisioningStatus(pool,pendingUpdate,active,hm.PoolId,db)
-			updateProvisioningStatus(listener,pendingUpdate,active,listener_id,db)
-			updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
+		if hm.ProvisioningStatus == pendingCreate {
+			createHealthMonitor(hm.Id, hm.PoolId, db)
+		} else if hm.ProvisioningStatus == pendingDelete {
+			deleteHealthMonitor(hm.Id, hm.PoolId, db)
 		}
 	}
 }

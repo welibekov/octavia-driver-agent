@@ -77,6 +77,25 @@ func findPoolsByLoadbalancerId(load_balancer_id string, db *sql.DB) []string {
 	return findDepsByLoadbalancerId(load_balancer_id, pool, db)
 }
 
+func findHealthMonitorsByPoolId(pool_id string, db *sql.DB) []string {
+	health_monitors := []string{}
+	res, err := db.Query(fmt.Sprintf("SELECT id FROM health_monitor WHERE pool_id='%s'",pool_id))
+	if err != nil {
+		logger.Debug(err)
+	}
+	for res.Next() {
+		var hm HealthMonitorTable
+		err := res.Scan(
+			&hm.Id,
+		)
+		if err != nil {
+			logger.Debug(err)
+		}
+		health_monitors = append(health_monitors, hm.Id)
+	}
+	return health_monitors
+}
+
 func findMembersByPoolId(pool_id string, db *sql.DB) []string {
 	members := []string{}
 	res, err := db.Query(fmt.Sprintf("SELECT id FROM member WHERE pool_id='%s'",pool_id))
@@ -121,6 +140,9 @@ func deleteLoadbalancer(load_balancer_id string, db *sql.DB) {
 
 	// delete pools first
 	for _, pool_id := range pools {
+		for _, health_monitor_id := range findHealthMonitorsByPoolId(pool_id, db) {
+			deleteHealthMonitor(health_monitor_id, pool_id, db)
+		}
 		for _, member_id := range findMembersByPoolId(pool_id, db) {
 			deleteMember(member_id, pool_id, db)
 		}
