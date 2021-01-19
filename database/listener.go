@@ -55,8 +55,8 @@ func deleteListener(listener_id, load_balancer_id string, db *sql.DB) {
 
 func UpdateTableListener(db *sql.DB, obj rabbit.ObjEntity) {
 	res, _ := db.Query("SELECT  project_id, id, operating_status, provisioning_status, load_balancer_id FROM listener;")
+	var ls ListenerTable
 	for res.Next() {
-		var ls ListenerTable
 		err := res.Scan(
 			&ls.ProjectId,
 			&ls.Id,

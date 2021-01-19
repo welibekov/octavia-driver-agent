@@ -26,9 +26,12 @@ type LoadbalancerTable struct {
 
 // load_balancer table from octavia database
 func UpdateTableLoadbalancer(db *sql.DB, obj rabbit.ObjEntity) {
-	res, _ := db.Query("SELECT  project_id, id, operating_status, provisioning_status FROM load_balancer;")
+	res, err := db.Query("SELECT project_id, id, operating_status, provisioning_status FROM load_balancer;")
+	if err != nil {
+		logger.Debug(err)
+	}
+	var lb LoadbalancerTable
 	for res.Next() {
-		var lb LoadbalancerTable
 		err := res.Scan(
 			&lb.ProjectId,
 			&lb.Id,
@@ -66,10 +69,39 @@ func deleteFromVip(table, id string, db *sql.DB) {
 	}
 }
 
+func findListenersByLoadbalancerId(load_balancer_id string, db *sql.DB) []string {
+	return findDepsByLoadbalancerId(load_balancer_id, listener, db)
+}
+
+func findPoolsByLoadbalancerId(load_balancer_id string, db *sql.DB) []string {
+	return findDepsByLoadbalancerId(load_balancer_id, pool, db)
+}
+
+func findMembersByPoolId(pool_id string, db *sql.DB) []string {
+	members := []string{}
+	res, err := db.Query(fmt.Sprintf("SELECT id FROM member WHERE pool_id='%s'",pool_id))
+	if err != nil {
+		logger.Debug(err)
+	}
+	for res.Next() {
+		var mb MemberTable
+		err := res.Scan(
+			&mb.Id,
+		)
+		if err != nil {
+			logger.Debug(err)
+		}
+		members = append(members, mb.Id)
+	}
+	return members
+}
 
 func findDepsByLoadbalancerId(id, dep string, db *sql.DB) []string {
 	deps := []string{}
-	res, _ := db.Query(fmt.Sprintf("SELECT id FROM %s WHERE load_balancer_id=?",dep))
+	res, err := db.Query(fmt.Sprintf("SELECT id FROM %s WHERE load_balancer_id='%s'",dep,id))
+	if err != nil {
+		logger.Debug(err)
+	}
 	for res.Next() {
 		var lb LoadbalancerTable
 		err := res.Scan(
@@ -84,18 +116,22 @@ func findDepsByLoadbalancerId(id, dep string, db *sql.DB) []string {
 }
 
 func deleteLoadbalancer(load_balancer_id string, db *sql.DB) {
-	listeners := findDepsByLoadbalancerId(load_balancer_id, listener, db)
-	pools := findDepsByLoadbalancerId(load_balancer_id, pool, db)
+	listeners := findListenersByLoadbalancerId(load_balancer_id, db)
+	pools := findPoolsByLoadbalancerId(load_balancer_id, db)
+
 	// delete pools first
-	for _, pool := range pools {
-		deletePool(pool, load_balancer_id, db)
+	for _, pool_id := range pools {
+		for _, member_id := range findMembersByPoolId(pool_id, db) {
+			deleteMember(member_id, pool_id, db)
+		}
+		deletePool(pool_id, load_balancer_id, db)
 	}
+
 	// delete listeners
-	for _, listener := range listeners {
-		deleteListener(listener, load_balancer_id, db)
+	for _, listener_id := range listeners {
+		deleteListener(listener_id, load_balancer_id, db)
 	}
 	// delete balancer
 	deleteFromVip(vip, load_balancer_id, db)
 	deleteItem(loadBalancer, load_balancer_id, db)
 }
-

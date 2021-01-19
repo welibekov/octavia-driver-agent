@@ -34,8 +34,8 @@ func deletePool(pool_id, load_balancer_id string, db *sql.DB) {
 
 func UpdateTablePool(db *sql.DB, obj rabbit.ObjEntity) {
 	res, _ := db.Query("SELECT  project_id, id, operating_status, provisioning_status, load_balancer_id FROM pool;")
+	var pl PoolTable
 	for res.Next() {
-		var pl PoolTable
 		err := res.Scan(
 			&pl.ProjectId,
 			&pl.Id,

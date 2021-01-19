@@ -30,17 +30,18 @@ func Run(ch *amqp.Channel, db *sql.DB)  {
 			json.Unmarshal(m.Body,&msg)
 			json.Unmarshal([]byte(msg.OsloMessage),&o_msg)
 			// update tables
-			for _, loadbalancer := range o_msg.Args.Status.Loadbalancers {
-				database.UpdateTableLoadbalancer(db, loadbalancer)
+			for _, member := range o_msg.Args.Status.Members {
+				database.UpdateTableMember(db, member)
+			}
+			for _, pool := range o_msg.Args.Status.Pools {
+				database.UpdateTablePool(db, pool)
+				database.UpdateTableHealthMonitor(db)
 			}
 			for _, listener := range o_msg.Args.Status.Listeners {
 				database.UpdateTableListener(db, listener)
 			}
-			for _, pool := range o_msg.Args.Status.Pools {
-				database.UpdateTablePool(db, pool)
-			}
-			for _, member := range o_msg.Args.Status.Members {
-				database.UpdateTableMember(db, member)
+			for _, loadbalancer := range o_msg.Args.Status.Loadbalancers {
+				database.UpdateTableLoadbalancer(db, loadbalancer)
 			}
 		}
 	}()

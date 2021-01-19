@@ -17,6 +17,7 @@ const (
 	listener = "listener"
 	pool = "pool"
 	member = "member"
+	healthMonitor = "health_monitor"
 	vip = "vip"
 )
 
