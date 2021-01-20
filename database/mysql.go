@@ -13,6 +13,8 @@ const (
 	pendingDelete = "PENDING_DELETE"
 	deleted = "DELETED"
 	active = "ACTIVE"
+	online = "ONLINE"
+	offline = "OFFLINE"
 	loadBalancer = "load_balancer"
 	listener = "listener"
 	pool = "pool"
@@ -42,6 +44,7 @@ func updateProvisioningStatus(table, old_status, status, id string, db *sql.DB) 
 	if err != nil {
 		logger.Debug(err)
 	}
+	defer update.Close()
 	_, err = update.Exec(status,id,old_status)
 	if err != nil {
 		logger.Debug(err)
@@ -55,6 +58,7 @@ func updateOperatingStatus(table, status, id string, db *sql.DB) {
 	if err != nil {
 		logger.Debug(err)
 	}
+	defer update.Close()
 	_, err = update.Exec(status,id)
 	if err != nil {
 		logger.Debug(err)
@@ -68,6 +72,7 @@ func deleteItem(table, id string, db *sql.DB) {
 	if err != nil {
 		logger.Debug(err)
 	}
+	defer del.Close()
 	_, err = del.Exec(id)
 	if err != nil {
 		logger.Debug(err)

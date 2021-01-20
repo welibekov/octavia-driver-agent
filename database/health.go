@@ -15,10 +15,22 @@ type HealthMonitorTable struct {
 	ProjectId string
 }
 
+func updateHealthMonitor(health_monitor_id, pool_id string, db *sql.DB) {
+	load_balancer_id := getLoadbalanceIdFromPoolId(pool_id, db)
+	listener_id := getListenerIdFromLoadbalancerId(load_balancer_id, db)
+
+	updateOperatingStatus(healthMonitor,online,health_monitor_id,db)
+	updateProvisioningStatus(healthMonitor, pendingUpdate, active, health_monitor_id, db)
+	updateProvisioningStatus(pool, pendingUpdate, active, pool_id, db)
+	updateProvisioningStatus(listener, pendingUpdate, active, listener_id, db)
+	updateProvisioningStatus(loadBalancer, pendingUpdate, active, load_balancer_id, db)
+}
+
 func createHealthMonitor(health_monitor_id, pool_id string, db *sql.DB) {
 	load_balancer_id := getLoadbalanceIdFromPoolId(pool_id, db)
 	listener_id := getListenerIdFromLoadbalancerId(load_balancer_id, db)
 
+	updateOperatingStatus(healthMonitor,online,health_monitor_id,db)
 	updateProvisioningStatus(healthMonitor, pendingCreate, active, health_monitor_id, db)
 	updateProvisioningStatus(pool, pendingUpdate, active, pool_id, db)
 	updateProvisioningStatus(listener, pendingUpdate, active, listener_id, db)
@@ -57,9 +69,10 @@ func UpdateTableHealthMonitor(db *sql.DB) {
 		//}
 
 		// update provisioing_status for pool and and corresponding listener,load_balancer
-
 		if hm.ProvisioningStatus == pendingCreate {
 			createHealthMonitor(hm.Id, hm.PoolId, db)
+		} else if hm.ProvisioningStatus == pendingUpdate {
+			updateHealthMonitor(hm.Id, hm.PoolId, db)
 		} else if hm.ProvisioningStatus == pendingDelete {
 			deleteHealthMonitor(hm.Id, hm.PoolId, db)
 		}

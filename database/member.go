@@ -34,7 +34,7 @@ func getLoadbalanceIdFromPoolId(pool_id string, db *sql.DB) string {
 	}
 
 	var pl PoolTable
-	for res.Next() { 
+	for res.Next() {
 		err = res.Scan(
 			&pl.LoadbalancerId,
 		)
@@ -45,22 +45,14 @@ func getLoadbalanceIdFromPoolId(pool_id string, db *sql.DB) string {
 	return pl.LoadbalancerId
 }
 
-func getListenerIdFromLoadbalancerId(load_balancer_id string, db *sql.DB) string {
-	res, err := db.Query(fmt.Sprintf("SELECT id FROM listener WHERE load_balancer_id='%s';",load_balancer_id))
+func updateMember(member_id, pool_id string, db *sql.DB) {
+	load_balancer_id := getLoadbalanceIdFromPoolId(pool_id, db)
+	listener_id := getListenerIdFromLoadbalancerId(load_balancer_id, db)
 
-	if err != nil {
-		logger.Debug(err)
-	}
-	var ls ListenerTable
-	for res.Next() {
-		err = res.Scan(
-			&ls.Id,
-		)
-		if err != nil {
-			logger.Debug(err)
-		}
-	}
-	return ls.Id
+	updateProvisioningStatus(member,pendingUpdate,active,member_id,db)
+	updateProvisioningStatus(pool,pendingUpdate,active,pool_id,db)
+	updateProvisioningStatus(listener,pendingUpdate,active,listener_id,db)
+	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
 }
 
 func createMember(member_id, pool_id string, db *sql.DB) {
@@ -105,6 +97,8 @@ func UpdateTableMember(db *sql.DB, obj rabbit.ObjEntity) {
 		}
 		if mb.ProvisioningStatus == pendingCreate {
 			createMember(mb.Id, mb.PoolId, db)
+		} else if mb.ProvisioningStatus == pendingUpdate {
+			updateMember(mb.Id, mb.PoolId, db)
 		} else if mb.ProvisioningStatus == pendingDelete {
 			deleteMember(mb.Id, mb.PoolId, db)
 		}

@@ -49,6 +49,8 @@ func UpdateTableLoadbalancer(db *sql.DB, obj rabbit.ObjEntity) {
 		// if this a new balancer (PENDING_CREATE), update it status to ACTIVE
 		if lb.ProvisioningStatus == pendingCreate {
 			updateProvisioningStatus(loadBalancer,pendingCreate,active,lb.Id,db)
+		} else if lb.ProvisioningStatus == pendingUpdate {
+			updateProvisioningStatus(loadBalancer,pendingUpdate,active,lb.Id,db)
 		} else if lb.ProvisioningStatus == pendingDelete {
 			deleteLoadbalancer(lb.Id, db)
 		}
@@ -61,6 +63,7 @@ func deleteFromVip(table, id string, db *sql.DB) {
 	if err != nil {
 		logger.Debug(err)
 	}
+	defer del.Close()
 	_, err = del.Exec(id)
 	if err != nil {
 		logger.Debug(err)

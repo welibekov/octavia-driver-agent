@@ -2,10 +2,8 @@ package rabbit
 
 import (
 	"github.com/streadway/amqp"
-	//"encoding/json"
-	//"octavia-driver-agent/logger"
-	//"fmt"
 )
+
 const (
 	Vmware_nsx__driver_listener = "vmware_nsx__driver_listener"
 )
@@ -36,7 +34,6 @@ type Msg struct {
 }
 
 func Connect(url string) (error, *amqp.Channel) {
-	//conn, err := amqp.Dial("amqp://openstack:uB9qX9fK9mZ2@OSsrvc01:5672/")
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		conn.Close()

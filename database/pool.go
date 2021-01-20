@@ -32,6 +32,7 @@ func removeDefaultPoolFromSessionPersistence(table, pool_id string, db *sql.DB) 
 	if err != nil {
 		logger.Debug(err)
 	}
+	defer del.Close()
 	_, err = del.Exec(pool_id)
 	if err != nil {
 		logger.Debug(err)
@@ -45,6 +46,38 @@ func deletePool(pool_id, load_balancer_id string, db *sql.DB) {
 	removeDefaultPoolFromListener(listener,pool_id,load_balancer_id,db)
 	deleteItem(pool,pool_id,db)
 	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
+}
+
+func updatePool(pool_id, load_balancer_id string, db *sql.DB) {
+	listener_id := getListenerIdFromLoadbalancerId(load_balancer_id, db)
+	updateProvisioningStatus(pool,pendingUpdate,active,pool_id,db)
+	updateProvisioningStatus(listener,pendingUpdate,active,listener_id,db)
+	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
+}
+
+func createPool(pool_id, load_balancer_id string, db *sql.DB) {
+	listener_id := getListenerIdFromLoadbalancerId(load_balancer_id, db)
+	updateProvisioningStatus(pool,pendingCreate,active,pool_id,db)
+	updateProvisioningStatus(listener,pendingUpdate,active,listener_id,db)
+	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
+}
+
+func getListenerIdFromLoadbalancerId(load_balancer_id string, db *sql.DB) string {
+	res, err := db.Query(fmt.Sprintf("SELECT id FROM listener WHERE load_balancer_id='%s';",load_balancer_id))
+
+	if err != nil {
+		logger.Debug(err)
+	}
+	var ls ListenerTable
+	for res.Next() {
+		err = res.Scan(
+			&ls.Id,
+		)
+		if err != nil {
+			logger.Debug(err)
+		}
+	}
+	return ls.Id
 }
 
 func UpdateTablePool(db *sql.DB, obj rabbit.ObjEntity) {
@@ -71,9 +104,9 @@ func UpdateTablePool(db *sql.DB, obj rabbit.ObjEntity) {
 		}
 		// update provisioing_status for pool and and corresponding listener,load_balancer
 		if pl.ProvisioningStatus == pendingCreate {
-			updateProvisioningStatus(pool,pendingCreate,active,pl.Id,db)
-			updateProvisioningStatus(listener,pendingUpdate,active,pl.LoadbalancerId,db)
-			updateProvisioningStatus(loadBalancer,pendingUpdate,active,pl.LoadbalancerId,db)
+			createPool(pl.Id, pl.LoadbalancerId, db)
+		} else if pl.ProvisioningStatus == pendingUpdate {
+			updatePool(pl.Id, pl.LoadbalancerId, db)
 		} else if pl.ProvisioningStatus == pendingDelete {
 			deletePool(pl.Id, pl.LoadbalancerId, db)
 		}

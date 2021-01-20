@@ -40,16 +40,27 @@ func removeDefaultPoolFromListener(table, pool_id, load_balancer_id string, db *
 	if err != nil {
 		logger.Debug(err)
 	}
+	defer update.Close()
 	_, err = update.Exec(load_balancer_id, pool_id)
 	if err != nil {
 		logger.Debug(err)
 	} else {
-		logger.Debug(fmt.Errorf("%s %s default_pool_id deleted",table,pool_id))
+		logger.Debug(fmt.Errorf("%s %s default_pool_id DELETED",table,pool_id))
 	}
 }
 
 func deleteListener(listener_id, load_balancer_id string, db *sql.DB) {
 	deleteItem(listener,listener_id,db)
+	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
+}
+
+func updateListener(listener_id, load_balancer_id string, db *sql.DB) {
+	updateProvisioningStatus(listener,pendingUpdate,active,listener_id,db)
+	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
+}
+
+func createListener(listener_id, load_balancer_id string, db *sql.DB) {
+	updateProvisioningStatus(listener,pendingCreate,active,listener_id,db)
 	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
 }
 
@@ -74,12 +85,11 @@ func UpdateTableListener(db *sql.DB, obj rabbit.ObjEntity) {
 		}
 		// update provisioing_status for listener and corresponding load_balancer
 		if ls.ProvisioningStatus == pendingCreate {
-			updateProvisioningStatus(listener,pendingCreate,active,ls.Id,db)
-			updateProvisioningStatus(loadBalancer,pendingUpdate,active,ls.LoadbalancerId,db)
+			createListener(ls.Id,ls.LoadbalancerId,db)
+		} else if ls.ProvisioningStatus == pendingUpdate {
+			updateListener(ls.Id,ls.LoadbalancerId,db)
 		} else if ls.ProvisioningStatus == pendingDelete {
 			deleteListener(ls.Id,ls.LoadbalancerId,db)
-			//deleteItem(listener,ls.Id,db)
-			//updateProvisioningStatus(loadBalancer,pendingUpdate,active,ls.LoadbalancerId,db)
 		}
 	}
 }
