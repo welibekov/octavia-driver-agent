@@ -11,16 +11,10 @@ import (
 	"os"
 )
 
+var ConfigFile string
+
 func main() {
-	configFile := flag.String("conf", "", "path to octavia config file")
-	flag.Parse()
-
-	if *configFile == "" {
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	err, url := config.Get(*configFile)
+	err, url := config.Get(ConfigFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -37,4 +31,18 @@ func main() {
 		return
 	}
 	server.Run(amqp, db)
+}
+
+func init() {
+	flag.StringVar(&ConfigFile,"conf", "", "path to octavia config file")
+	flag.StringVar(&logger.LogFile,"log", "", "path to octavia log file")
+	flag.Parse()
+
+	if ConfigFile == "" {
+		flag.PrintDefaults()
+		os.Exit(1)
+	} else if logger.LogFile == "" {
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
 }
