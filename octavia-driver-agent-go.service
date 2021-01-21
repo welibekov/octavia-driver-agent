@@ -1,0 +1,14 @@
+[Unit]
+Description=OpenStack Octavia Driver-Agent service (dirty hack)
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=octavia
+ExecStart=/usr/bin/octavia-driver-agent-go -conf /etc/octavia/octavia.conf -log /var/log/octavia/octavia-driver-go.log
+PrivateTmp=false
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
