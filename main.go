@@ -24,13 +24,14 @@ func main() {
 		logger.Debug(err)
 		return
 	}
+	database.Database = db
 
 	err, amqp := rabbit.Connect(url.Rabbit)
 	if err != nil {
 		logger.Debug(err)
 		return
 	}
-	server.Run(amqp, db)
+	server.Run(amqp)
 }
 
 func init() {

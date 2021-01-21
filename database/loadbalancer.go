@@ -1,8 +1,6 @@
 package database
 
 import (
-	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
 	"octavia-driver-agent/rabbit"
 	"octavia-driver-agent/logger"
 	"fmt"
@@ -11,22 +9,13 @@ import (
 type LoadbalancerTable struct {
 	ProjectId			string
 	Id					string
-	Name				string
-	Description			sql.NullString
 	ProvisioningStatus	string
 	OperatingStatus		string
-	Enabled				int
-	Topology			string
-	ServerGroupId		sql.NullString
-	CreatedAt			string
-	UpdatedAt			sql.NullString
-	Provider			string
-	FlavorId			sql.NullString
 }
 
 // load_balancer table from octavia database
-func UpdateTableLoadbalancer(db *sql.DB, obj rabbit.ObjEntity) {
-	res, err := db.Query("SELECT project_id, id, operating_status, provisioning_status FROM load_balancer;")
+func UpdateTableLoadbalancer(obj rabbit.ObjEntity) {
+	res, err := Database.Query("SELECT project_id, id, operating_status, provisioning_status FROM load_balancer;")
 	if err != nil {
 		logger.Debug(err)
 	}
@@ -44,22 +33,22 @@ func UpdateTableLoadbalancer(db *sql.DB, obj rabbit.ObjEntity) {
 
 		// check for operating_status first
 		if lb.OperatingStatus != obj.OperatingStatus {
-			updateOperatingStatus(loadBalancer,obj.OperatingStatus,lb.Id,db)
+			updateOperatingStatus(loadBalancer,obj.OperatingStatus,lb.Id)
 		}
 		// if this a new balancer (PENDING_CREATE), update it status to ACTIVE
 		if lb.ProvisioningStatus == pendingCreate {
-			updateProvisioningStatus(loadBalancer,pendingCreate,active,lb.Id,db)
+			updateProvisioningStatus(loadBalancer,pendingCreate,active,lb.Id)
 		} else if lb.ProvisioningStatus == pendingUpdate {
-			updateProvisioningStatus(loadBalancer,pendingUpdate,active,lb.Id,db)
+			updateProvisioningStatus(loadBalancer,pendingUpdate,active,lb.Id)
 		} else if lb.ProvisioningStatus == pendingDelete {
-			deleteLoadbalancer(lb.Id, db)
+			deleteLoadbalancer(lb.Id)
 		}
 	}
 }
 
 // delete load_balancer from vip table
-func deleteFromVip(table, id string, db *sql.DB) {
-	del, err := db.Prepare(fmt.Sprintf("DELETE from %s WHERE load_balancer_id=?",table))
+func deleteFromVip(table, id string) {
+	del, err := Database.Prepare(fmt.Sprintf("DELETE from %s WHERE load_balancer_id=?",table))
 	if err != nil {
 		logger.Debug(err)
 	}
@@ -72,17 +61,17 @@ func deleteFromVip(table, id string, db *sql.DB) {
 	}
 }
 
-func findListenersByLoadbalancerId(load_balancer_id string, db *sql.DB) []string {
-	return findDepsByLoadbalancerId(load_balancer_id, listener, db)
+func findListenersByLoadbalancerId(load_balancer_id string) []string {
+	return findDepsByLoadbalancerId(load_balancer_id, listener)
 }
 
-func findPoolsByLoadbalancerId(load_balancer_id string, db *sql.DB) []string {
-	return findDepsByLoadbalancerId(load_balancer_id, pool, db)
+func findPoolsByLoadbalancerId(load_balancer_id string) []string {
+	return findDepsByLoadbalancerId(load_balancer_id, pool)
 }
 
-func findHealthMonitorsByPoolId(pool_id string, db *sql.DB) []string {
+func findHealthMonitorsByPoolId(pool_id string) []string {
 	health_monitors := []string{}
-	res, err := db.Query(fmt.Sprintf("SELECT id FROM health_monitor WHERE pool_id='%s'",pool_id))
+	res, err := Database.Query(fmt.Sprintf("SELECT id FROM health_monitor WHERE pool_id='%s'",pool_id))
 	if err != nil {
 		logger.Debug(err)
 	}
@@ -99,9 +88,9 @@ func findHealthMonitorsByPoolId(pool_id string, db *sql.DB) []string {
 	return health_monitors
 }
 
-func findMembersByPoolId(pool_id string, db *sql.DB) []string {
+func findMembersByPoolId(pool_id string) []string {
 	members := []string{}
-	res, err := db.Query(fmt.Sprintf("SELECT id FROM member WHERE pool_id='%s'",pool_id))
+	res, err := Database.Query(fmt.Sprintf("SELECT id FROM member WHERE pool_id='%s'",pool_id))
 	if err != nil {
 		logger.Debug(err)
 	}
@@ -118,9 +107,9 @@ func findMembersByPoolId(pool_id string, db *sql.DB) []string {
 	return members
 }
 
-func findDepsByLoadbalancerId(id, dep string, db *sql.DB) []string {
+func findDepsByLoadbalancerId(id, dep string) []string {
 	deps := []string{}
-	res, err := db.Query(fmt.Sprintf("SELECT id FROM %s WHERE load_balancer_id='%s'",dep,id))
+	res, err := Database.Query(fmt.Sprintf("SELECT id FROM %s WHERE load_balancer_id='%s'",dep,id))
 	if err != nil {
 		logger.Debug(err)
 	}
@@ -137,26 +126,26 @@ func findDepsByLoadbalancerId(id, dep string, db *sql.DB) []string {
 	return deps
 }
 
-func deleteLoadbalancer(load_balancer_id string, db *sql.DB) {
-	listeners := findListenersByLoadbalancerId(load_balancer_id, db)
-	pools := findPoolsByLoadbalancerId(load_balancer_id, db)
+func deleteLoadbalancer(load_balancer_id string) {
+	listeners := findListenersByLoadbalancerId(load_balancer_id)
+	pools := findPoolsByLoadbalancerId(load_balancer_id)
 
 	// delete pools first
 	for _, pool_id := range pools {
-		for _, health_monitor_id := range findHealthMonitorsByPoolId(pool_id, db) {
-			deleteHealthMonitor(health_monitor_id, pool_id, db)
+		for _, health_monitor_id := range findHealthMonitorsByPoolId(pool_id) {
+			deleteHealthMonitor(health_monitor_id, pool_id)
 		}
-		for _, member_id := range findMembersByPoolId(pool_id, db) {
-			deleteMember(member_id, pool_id, db)
+		for _, member_id := range findMembersByPoolId(pool_id) {
+			deleteMember(member_id, pool_id)
 		}
-		deletePool(pool_id, load_balancer_id, db)
+		deletePool(pool_id, load_balancer_id)
 	}
 
 	// delete listeners
 	for _, listener_id := range listeners {
-		deleteListener(listener_id, load_balancer_id, db)
+		deleteListener(listener_id, load_balancer_id)
 	}
 	// delete balancer
-	deleteFromVip(vip, load_balancer_id, db)
-	deleteItem(loadBalancer, load_balancer_id, db)
+	deleteFromVip(vip, load_balancer_id)
+	deleteItem(loadBalancer, load_balancer_id)
 }

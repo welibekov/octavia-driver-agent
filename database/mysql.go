@@ -24,8 +24,9 @@ const (
 	sessionPersistence = "session_persistence"
 )
 
+var Database *sql.DB
+
 func Connect(url string) (error, *sql.DB) {
-	//db, err := sql.Open("mysql", "octavia:octavia@tcp(127.0.0.1)/octavia")
 	db, err := sql.Open("mysql", url)
 	if err != nil {
 		db.Close()
@@ -39,8 +40,8 @@ func Connect(url string) (error, *sql.DB) {
 	return nil, db
 }
 
-func updateProvisioningStatus(table, old_status, status, id string, db *sql.DB) {
-	update, err := db.Prepare(fmt.Sprintf("UPDATE %s SET provisioning_status=? WHERE id=? and provisioning_status=?",table))
+func updateProvisioningStatus(table, old_status, status, id string) {
+	update, err := Database.Prepare(fmt.Sprintf("UPDATE %s SET provisioning_status=? WHERE id=? and provisioning_status=?",table))
 	if err != nil {
 		logger.Debug(err)
 	}
@@ -53,8 +54,8 @@ func updateProvisioningStatus(table, old_status, status, id string, db *sql.DB) 
 	}
 }
 
-func updateOperatingStatus(table, status, id string, db *sql.DB) {
-	update, err := db.Prepare(fmt.Sprintf("UPDATE %s SET operating_status=? WHERE id=?",table))
+func updateOperatingStatus(table, status, id string) {
+	update, err := Database.Prepare(fmt.Sprintf("UPDATE %s SET operating_status=? WHERE id=?",table))
 	if err != nil {
 		logger.Debug(err)
 	}
@@ -67,8 +68,8 @@ func updateOperatingStatus(table, status, id string, db *sql.DB) {
 	}
 }
 
-func deleteItem(table, id string, db *sql.DB) {
-	del, err := db.Prepare(fmt.Sprintf("DELETE from %s WHERE id=?",table))
+func deleteItem(table, id string) {
+	del, err := Database.Prepare(fmt.Sprintf("DELETE from %s WHERE id=?",table))
 	if err != nil {
 		logger.Debug(err)
 	}

@@ -1,16 +1,13 @@
 package server
 
 import (
-	//"fmt"
-	"database/sql"
 	"github.com/streadway/amqp"
 	"octavia-driver-agent/rabbit"
-	//"octavia-driver-agent/logger"
 	"octavia-driver-agent/database"
 	"encoding/json"
 )
 
-func Run(ch *amqp.Channel, db *sql.DB)  {
+func Run(ch *amqp.Channel)  {
 	var msg rabbit.Msg
 	var o_msg rabbit.OsloMsg
 	msgs, _ := ch.Consume(
@@ -31,17 +28,17 @@ func Run(ch *amqp.Channel, db *sql.DB)  {
 			json.Unmarshal([]byte(msg.OsloMessage),&o_msg)
 			// update tables
 			for _, member := range o_msg.Args.Status.Members {
-				database.UpdateTableMember(db, member)
+				database.UpdateTableMember(member)
 			}
 			for _, pool := range o_msg.Args.Status.Pools {
-				database.UpdateTablePool(db, pool)
-				database.UpdateTableHealthMonitor(db)
+				database.UpdateTablePool(pool)
+				database.UpdateTableHealthMonitor()
 			}
 			for _, listener := range o_msg.Args.Status.Listeners {
-				database.UpdateTableListener(db, listener)
+				database.UpdateTableListener(listener)
 			}
 			for _, loadbalancer := range o_msg.Args.Status.Loadbalancers {
-				database.UpdateTableLoadbalancer(db, loadbalancer)
+				database.UpdateTableLoadbalancer(loadbalancer)
 			}
 		}
 	}()

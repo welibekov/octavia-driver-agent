@@ -1,8 +1,6 @@
 package database
 
 import (
-	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
 	"octavia-driver-agent/rabbit"
 	"octavia-driver-agent/logger"
 	"fmt"
@@ -11,24 +9,13 @@ import (
 type PoolTable struct {
 	ProjectId				string
 	Id						string
-	Name					string
-	Description				string
-	Protocol				string
-	LbAlgorithm				string
 	OperatingStatus			string
-	Enabled					int
 	LoadbalancerId			string
-	CreatedAt				string
-	UpdatedAt				string
 	ProvisioningStatus		string
-	TlsCertificateId		string
-	CaTlsCertificateId		string
-	CrlContainerId			string
-	TlsEnabled				int
 }
 
-func removeDefaultPoolFromSessionPersistence(table, pool_id string, db *sql.DB) {
-	del, err := db.Prepare(fmt.Sprintf("DELETE from %s WHERE pool_id=?",table))
+func removeDefaultPoolFromSessionPersistence(table, pool_id string) {
+	del, err := Database.Prepare(fmt.Sprintf("DELETE from %s WHERE pool_id=?",table))
 	if err != nil {
 		logger.Debug(err)
 	}
@@ -41,29 +28,29 @@ func removeDefaultPoolFromSessionPersistence(table, pool_id string, db *sql.DB) 
 	}
 }
 
-func deletePool(pool_id, load_balancer_id string, db *sql.DB) {
-	removeDefaultPoolFromSessionPersistence(sessionPersistence,pool_id,db)
-	removeDefaultPoolFromListener(listener,pool_id,load_balancer_id,db)
-	deleteItem(pool,pool_id,db)
-	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
+func deletePool(pool_id, load_balancer_id string) {
+	removeDefaultPoolFromSessionPersistence(sessionPersistence,pool_id)
+	removeDefaultPoolFromListener(listener,pool_id,load_balancer_id)
+	deleteItem(pool,pool_id)
+	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id)
 }
 
-func updatePool(pool_id, load_balancer_id string, db *sql.DB) {
-	listener_id := getListenerIdFromLoadbalancerId(load_balancer_id, db)
-	updateProvisioningStatus(pool,pendingUpdate,active,pool_id,db)
-	updateProvisioningStatus(listener,pendingUpdate,active,listener_id,db)
-	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
+func updatePool(pool_id, load_balancer_id string) {
+	listener_id := getListenerIdFromLoadbalancerId(load_balancer_id)
+	updateProvisioningStatus(pool,pendingUpdate,active,pool_id)
+	updateProvisioningStatus(listener,pendingUpdate,active,listener_id)
+	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id)
 }
 
-func createPool(pool_id, load_balancer_id string, db *sql.DB) {
-	listener_id := getListenerIdFromLoadbalancerId(load_balancer_id, db)
-	updateProvisioningStatus(pool,pendingCreate,active,pool_id,db)
-	updateProvisioningStatus(listener,pendingUpdate,active,listener_id,db)
-	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id,db)
+func createPool(pool_id, load_balancer_id string) {
+	listener_id := getListenerIdFromLoadbalancerId(load_balancer_id)
+	updateProvisioningStatus(pool,pendingCreate,active,pool_id)
+	updateProvisioningStatus(listener,pendingUpdate,active,listener_id)
+	updateProvisioningStatus(loadBalancer,pendingUpdate,active,load_balancer_id)
 }
 
-func getListenerIdFromLoadbalancerId(load_balancer_id string, db *sql.DB) string {
-	res, err := db.Query(fmt.Sprintf("SELECT id FROM listener WHERE load_balancer_id='%s';",load_balancer_id))
+func getListenerIdFromLoadbalancerId(load_balancer_id string) string {
+	res, err := Database.Query(fmt.Sprintf("SELECT id FROM listener WHERE load_balancer_id='%s';",load_balancer_id))
 
 	if err != nil {
 		logger.Debug(err)
@@ -80,8 +67,8 @@ func getListenerIdFromLoadbalancerId(load_balancer_id string, db *sql.DB) string
 	return ls.Id
 }
 
-func UpdateTablePool(db *sql.DB, obj rabbit.ObjEntity) {
-	res, err := db.Query("SELECT  project_id, id, operating_status, provisioning_status, load_balancer_id FROM pool;")
+func UpdateTablePool(obj rabbit.ObjEntity) {
+	res, err := Database.Query("SELECT  project_id, id, operating_status, provisioning_status, load_balancer_id FROM pool;")
 	if err != nil {
 		logger.Debug(err)
 	}
@@ -100,15 +87,15 @@ func UpdateTablePool(db *sql.DB, obj rabbit.ObjEntity) {
 
 		// check for operating_status first
 		if pl.OperatingStatus != obj.OperatingStatus {
-			updateOperatingStatus(pool,obj.OperatingStatus,pl.Id,db)
+			updateOperatingStatus(pool,obj.OperatingStatus,pl.Id)
 		}
 		// update provisioing_status for pool and and corresponding listener,load_balancer
 		if pl.ProvisioningStatus == pendingCreate {
-			createPool(pl.Id, pl.LoadbalancerId, db)
+			createPool(pl.Id, pl.LoadbalancerId)
 		} else if pl.ProvisioningStatus == pendingUpdate {
-			updatePool(pl.Id, pl.LoadbalancerId, db)
+			updatePool(pl.Id, pl.LoadbalancerId)
 		} else if pl.ProvisioningStatus == pendingDelete {
-			deletePool(pl.Id, pl.LoadbalancerId, db)
+			deletePool(pl.Id, pl.LoadbalancerId)
 		}
 	}
 }
