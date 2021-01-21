@@ -39,10 +39,7 @@ func init() {
 	flag.StringVar(&logger.LogFile,"log", "", "path to octavia log file")
 	flag.Parse()
 
-	if ConfigFile == "" {
-		flag.PrintDefaults()
-		os.Exit(1)
-	} else if logger.LogFile == "" {
+	if ConfigFile == "" || logger.LogFile == "" {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
