@@ -73,6 +73,7 @@ func UpdateTableHealthMonitor() {
 			updateHealthMonitor(hm.Id, hm.PoolId)
 		} else if hm.ProvisioningStatus == pendingDelete {
 			deleteHealthMonitor(hm.Id, hm.PoolId)
+            updateQuota(health_monitor_quota, hm.ProjectId)
 		}
 	}
 }

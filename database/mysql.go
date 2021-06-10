@@ -22,6 +22,11 @@ const (
 	healthMonitor = "health_monitor"
 	vip = "vip"
 	sessionPersistence = "session_persistence"
+    member_quota = "in_use_member"
+    pool_quota = "in_use_pool"
+    listener_quota = "in_use_listener"
+    load_balancer_quota = "in_use_load_balancer"
+    health_monitor_quota = "in_use_health_monitor"
 )
 
 var Database *sql.DB
@@ -82,3 +87,16 @@ func deleteItem(table, id string) {
 	}
 }
 
+func updateQuota(column,project_id string) {
+    update, err := Database.Prepare(fmt.Sprintf("UPDATE quotas set %s = IF(%s=1, NULL, %s-1) where project_id = '%s';",column,column,column,project_id))
+    if err != nil {
+        logger.Debug(err)
+    }
+    defer update.Close()
+    _, err = update.Exec()
+    if err != nil {
+        logger.Debug(err)
+    } else {
+        logger.Debug(fmt.Errorf("quota %s for project=%s: -> UPDATED",column,project_id))
+    }
+}

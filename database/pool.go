@@ -96,6 +96,7 @@ func UpdateTablePool(obj rabbit.ObjEntity) {
 			updatePool(pl.Id, pl.LoadbalancerId)
 		} else if pl.ProvisioningStatus == pendingDelete {
 			deletePool(pl.Id, pl.LoadbalancerId)
+            updateQuota(pool_quota, pl.ProjectId)
 		}
 	}
 }

@@ -70,6 +70,7 @@ func UpdateTableListener(obj rabbit.ObjEntity) {
 			updateListener(ls.Id,ls.LoadbalancerId)
 		} else if ls.ProvisioningStatus == pendingDelete {
 			deleteListener(ls.Id,ls.LoadbalancerId)
+            updateQuota(listener_quota,ls.ProjectId)
 		}
 	}
 }

@@ -1,8 +1,6 @@
 package database
 
 import (
-	//"database/sql"
-	//_ "github.com/go-sql-driver/mysql"
 	"octavia-driver-agent/rabbit"
 	"octavia-driver-agent/logger"
 	"fmt"
@@ -89,7 +87,8 @@ func UpdateTableMember(obj rabbit.ObjEntity) {
 		} else if mb.ProvisioningStatus == pendingUpdate {
 			updateMember(mb.Id, mb.PoolId)
 		} else if mb.ProvisioningStatus == pendingDelete {
-			deleteMember(mb.Id, mb.PoolId)
+		    deleteMember(mb.Id, mb.PoolId)
+            updateQuota(member_quota, mb.ProjectId)
 		}
 	}
 }
